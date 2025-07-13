@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Three.js Soccer Animation – Red vs Blue</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    canvas { display: block; }
+  </style>
+  <!-- Three.js CDN (r161) -->
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.js';
+
+    /* ------------------------------------------------------
+     *  Helper functions
+     * ----------------------------------------------------*/
+    // Simple stick‑figure factory
+    function createStickman(color) {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color });
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), mat);
+      head.position.y = 3.2; group.add(head);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 2.4, 8), mat);
+      body.position.y = 1.8; group.add(body);
+      const armG = new THREE.CylinderGeometry(0.15, 0.15, 2, 6);
+      const lArm = new THREE.Mesh(armG, mat); lArm.position.set(-0.8, 2.4, 0); lArm.rotation.z =  Math.PI/4;
+      const rArm = lArm.clone(); rArm.position.x = 0.8; rArm.rotation.z = -Math.PI/4; group.add(lArm,rArm);
+      const legG = new THREE.CylinderGeometry(0.18, 0.18, 2.6, 6);
+      const lLeg = new THREE.Mesh(legG, mat); lLeg.position.set(-0.4,0.5,0); lLeg.rotation.z = -0.05;
+      const rLeg = lLeg.clone(); rLeg.position.x = 0.4; rLeg.rotation.z = 0.05; group.add(lLeg,rLeg);
+      return group;
+    }
+
+    // Jersey number sprite
+    function numberSprite(num, color="#fff"){
+      const size=128,c=document.createElement('canvas');c.width=c.height=size;const ctx=c.getContext('2d');
+      ctx.font='bold 96px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=color;ctx.fillText(num,size/2,size/2);
+      const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthWrite:false}));
+      spr.scale.set(2,2,1);spr.position.y=4.2;return spr;
+    }
+
+    // Goal (posts + crossbar + simple net)
+    function createGoal(x){
+      const grp=new THREE.Group();
+      const postM=new THREE.MeshBasicMaterial({color:0xffffff});
+      const postG=new THREE.BoxGeometry(0.3,6,0.3);
+      const left=new THREE.Mesh(postG,postM); const right=left.clone();
+      left.position.set(x,3,-4); right.position.set(x,3,4);
+      const cross=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.3,8),postM); cross.position.set(x,6,0);
+      grp.add(left,right,cross);
+      // Net (wireframe plane slightly behind posts)
+      const net=new THREE.Mesh(new THREE.PlaneGeometry(8,6,8,6),new THREE.MeshBasicMaterial({color:0xffffff,wireframe:true}));
+      net.rotation.y=Math.PI/2; net.position.set(x+Math.sign(x)*0.15,3,0);
+      grp.add(net);
+      return grp;
+    }
+
+    /* ------------------------------------------------------
+     *  Scene setup
+     * ----------------------------------------------------*/
+    const scene=new THREE.Scene(); scene.background=new THREE.Color('#7ec0ff');
+    const camera=new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,0.1,500);
+    const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setSize(window.innerWidth,window.innerHeight); document.body.appendChild(renderer.domElement);
+
+    // Lights
+    scene.add(new THREE.HemisphereLight(0xffffff,0x508040,0.8));
+    const dir=new THREE.DirectionalLight(0xffffff,0.6); dir.position.set(20,40,10); scene.add(dir);
+
+    // Pitch
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(120,80),new THREE.MeshLambertMaterial({color:0x2e8b57}));
+    ground.rotation.x=-Math.PI/2; scene.add(ground);
+
+    // Goals both ends
+    scene.add(createGoal(58));   // Right goal (red team attacks)
+    scene.add(createGoal(-58));  // Left goal
+
+    /* ------------------------------------------------------
+     *  Teams & ball
+     * ----------------------------------------------------*/
+    const redColor=0xff3333, blueColor=0x3333ff;
+    const red5=createStickman(redColor); red5.position.set(-35,0,0); red5.add(numberSprite('5')); scene.add(red5);
+    const red7=createStickman(redColor); red7.position.set(-20,0,0); red7.add(numberSprite('7')); scene.add(red7);
+
+    // Blue defenders (visual)
+    for(let i=0;i<6;i++){const p=createStickman(blueColor); p.position.set(-10+(i%3)*15,0,-15+Math.floor(i/3)*15); scene.add(p);}
+
+    const ball=new THREE.Mesh(new THREE.SphereGeometry(1,16,16),new THREE.MeshStandardMaterial({color:0xffffff}));
+    ball.position.copy(red5.position).add(new THREE.Vector3(1.8,1,0)); scene.add(ball);
+
+    /* ------------------------------------------------------
+     *  Animation timing
+     * ----------------------------------------------------*/
+    const passT=1.2, dribbleT=2.0, shotT=1.0, totalT=passT+dribbleT+shotT;
+    const tPassEnd=passT, tDribbleEnd=passT+dribbleT;
+    const clock=new THREE.Clock();
+
+    // Camera path
+    const camStart=new THREE.Vector3(0,70,0);
+
+    function camFollowTarget(){ // dynamic end behind red7
+      return red7.position.clone().add(new THREE.Vector3(-10,10,-20));
+    }
+
+    camera.position.copy(camStart); camera.lookAt(red7.position);
+
+    /* ------------------------------------------------------
+     *  Main loop
+     * ----------------------------------------------------*/
+    function animate(){
+      const t=clock.getElapsedTime();
+      // PASS
+      if(t<tPassEnd){
+        const a=t/passT;
+        ball.position.lerpVectors(red5.position.clone().add(new THREE.Vector3(1.8,1,0)), red7.position.clone().add(new THREE.Vector3(0,1,0)), a);
+      }
+      // DRIBBLE
+      else if(t<tDribbleEnd){
+        const b=(t-passT)/dribbleT;
+        const dx=THREE.MathUtils.lerp(0,30,b);
+        red7.position.x=-20+dx; ball.position.copy(red7.position).add(new THREE.Vector3(0,1,0));
+      }
+      // SHOT
+      else if(t<totalT){
+        const g=(t-tDribbleEnd)/shotT;
+        red7.position.x=10+g*5;
+        ball.position.lerpVectors(new THREE.Vector3(10,1,0), new THREE.Vector3(58,3,0), g);
+      } else { clock.stop(); }
+
+      // Camera tween
+      const camAlpha=Math.min(t/(passT+dribbleT),1);
+      camera.position.lerpVectors(camStart, camFollowTarget(), camAlpha);
+      camera.lookAt(red7.position);
+
+      renderer.render(scene,camera);
+      if(clock.running) requestAnimationFrame(animate);
+    }
+    animate();
+
+    window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);});
+  </script>
+</head>
+<body></body>
+</html>

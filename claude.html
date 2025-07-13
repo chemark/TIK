@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js 足球进球动画</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #333;
+            background: rgba(255,255,255,0.9);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        #scoreboard {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #333;
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        .team-red { color: #ff0000; }
+        .team-blue { color: #0000ff; }
+    </style>
+</head>
+<body>
+    <div id="info">点击开始动画 | 观看红队7号的精彩进球</div>
+    <div id="scoreboard">
+        <div><span class="team-red">红队</span> vs <span class="team-blue">蓝队</span></div>
+        <div id="score">0 - 0</div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // 场景设置
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 100, 400);
+        
+        const camera = new THREE.PerspectiveCamera(
+            75, 
+            window.innerWidth / window.innerHeight, 
+            0.1, 
+            1000
+        );
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+        
+        // 光源
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(50, 100, 50);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.camera.left = -100;
+        directionalLight.shadow.camera.right = 100;
+        directionalLight.shadow.camera.top = 100;
+        directionalLight.shadow.camera.bottom = -100;
+        scene.add(directionalLight);
+        
+        const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x90EE90, 0.4);
+        scene.add(hemisphereLight);
+        
+        // 创建足球场
+        function createFootballField() {
+            // 草地
+            const fieldGeometry = new THREE.PlaneGeometry(120, 80);
+            const fieldMaterial = new THREE.MeshLambertMaterial({ color: 0x32CD32 });
+            const field = new THREE.Mesh(fieldGeometry, fieldMaterial);
+            field.rotation.x = -Math.PI / 2;
+            field.receiveShadow = true;
+            scene.add(field);
+            
+            // 场地线条
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+            
+            // 边界线
+            const boundaryPoints = [
+                new THREE.Vector3(-50, 0.1, -35),
+                new THREE.Vector3(50, 0.1, -35),
+                new THREE.Vector3(50, 0.1, 35),
+                new THREE.Vector3(-50, 0.1, 35),
+                new THREE.Vector3(-50, 0.1, -35)
+            ];
+            const boundaryGeometry = new THREE.BufferGeometry().setFromPoints(boundaryPoints);
+            const boundaryLine = new THREE.Line(boundaryGeometry, lineMaterial);
+            scene.add(boundaryLine);
+            
+            // 中线
+            const centerLineGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0.1, -35),
+                new THREE.Vector3(0, 0.1, 35)
+            ]);
+            const centerLine = new THREE.Line(centerLineGeometry, lineMaterial);
+            scene.add(centerLine);
+            
+            // 中圈
+            const centerCircle = new THREE.RingGeometry(9.9, 10, 32);
+            const centerCircleMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xffffff, 
+                side: THREE.DoubleSide 
+            });
+            const centerCircleMesh = new THREE.Mesh(centerCircle, centerCircleMaterial);
+            centerCircleMesh.rotation.x = -Math.PI / 2;
+            centerCircleMesh.position.y = 0.1;
+            scene.add(centerCircleMesh);
+        }
+        
+        // 创建球门
+        function createGoal(x) {
+            const goalGroup = new THREE.Group();
+            
+            // 门柱
+            const postGeometry = new THREE.CylinderGeometry(0.1, 0.1, 3);
+            const postMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+            
+            const leftPost = new THREE.Mesh(postGeometry, postMaterial);
+            leftPost.position.set(x, 1.5, -3.66);
+            goalGroup.add(leftPost);
+            
+            const rightPost = new THREE.Mesh(postGeometry, postMaterial);
+            rightPost.position.set(x, 1.5, 3.66);
+            goalGroup.add(rightPost);
+            
+            // 横梁
+            const crossbarGeometry = new THREE.BoxGeometry(0.2, 0.2, 7.32);
+            const crossbar = new THREE.Mesh(crossbarGeometry, postMaterial);
+            crossbar.position.set(x, 3, 0);
+            goalGroup.add(crossbar);
+            
+            // 球网
+            const netGeometry = new THREE.PlaneGeometry(7.32, 3);
+            const netMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xffffff, 
+                transparent: true, 
+                opacity: 0.3,
+                side: THREE.DoubleSide
+            });
+            const netBack = new THREE.Mesh(netGeometry, netMaterial);
+            netBack.position.set(x - 1, 1.5, 0);
+            netBack.rotation.y = Math.PI / 2;
+            goalGroup.add(netBack);
+            
+            scene.add(goalGroup);
+            return goalGroup;
+        }
+        
+        // 创建火柴人球员
+        function createStickPlayer(color, number) {
+            const group = new THREE.Group();
+            
+            // 头
+            const headGeometry = new THREE.SphereGeometry(0.5, 8, 8);
+            const headMaterial = new THREE.MeshPhongMaterial({ color: 0xffdbac });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = 4;
+            head.castShadow = true;
+            group.add(head);
+            
+            // 身体
+            const bodyGeometry = new THREE.CylinderGeometry(0.3, 0.3, 2);
+            const bodyMaterial = new THREE.MeshPhongMaterial({ color: color });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 2.5;
+            body.castShadow = true;
+            group.add(body);
+            
+            // 号码
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 40px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(number.toString(), 32, 32);
+            
+            const numberTexture = new THREE.CanvasTexture(canvas);
+            const numberMaterial = new THREE.MeshBasicMaterial({ 
+                map: numberTexture, 
+                transparent: true 
+            });
+            const numberPlane = new THREE.PlaneGeometry(0.8, 0.8);
+            const numberMesh = new THREE.Mesh(numberPlane, numberMaterial);
+            numberMesh.position.y = 2.5;
+            numberMesh.position.z = 0.31;
+            group.add(numberMesh);
+            
+            // 手臂
+            const armGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1.5);
+            const armMaterial = new THREE.MeshPhongMaterial({ color: 0xffdbac });
+            
+            const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+            leftArm.position.set(-0.4, 3, 0);
+            leftArm.rotation.z = Math.PI / 6;
+            leftArm.castShadow = true;
+            group.add(leftArm);
+            
+            const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+            rightArm.position.set(0.4, 3, 0);
+            rightArm.rotation.z = -Math.PI / 6;
+            rightArm.castShadow = true;
+            group.add(rightArm);
+            
+            // 腿
+            const legGeometry = new THREE.CylinderGeometry(0.15, 0.15, 2);
+            const legMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
+            
+            const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            leftLeg.position.set(-0.2, 0.5, 0);
+            leftLeg.castShadow = true;
+            group.add(leftLeg);
+            
+            const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            rightLeg.position.set(0.2, 0.5, 0);
+            rightLeg.castShadow = true;
+            group.add(rightLeg);
+            
+            return {
+                model: group,
+                leftLeg: leftLeg,
+                rightLeg: rightLeg,
+                leftArm: leftArm,
+                rightArm: rightArm
+            };
+        }
+        
+        // 创建足球
+        function createFootball() {
+            const ballGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+            const ballMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xffffff,
+                emissive: 0x111111
+            });
+            const ball = new THREE.Mesh(ballGeometry, ballMaterial);
+            ball.castShadow = true;
+            ball.position.y = 0.3;
+            scene.add(ball);
+            return ball;
+        }
+        
+        // 创建场景
+        createFootballField();
+        const leftGoal = createGoal(-50);
+        const rightGoal = createGoal(50);
+        
+        // 创建球员
+        const redPlayers = [];
+        const bluePlayers = [];
+        
+        // 红队5号（传球者）
+        const red5 = createStickPlayer(0xff0000, 5);
+        red5.model.position.set(-10, 0, 5);
+        scene.add(red5.model);
+        redPlayers.push(red5);
+        
+        // 红队7号（射门者）
+        const red7 = createStickPlayer(0xff0000, 7);
+        red7.model.position.set(-5, 0, -10);
+        scene.add(red7.model);
+        redPlayers.push(red7);
+        
+        // 其他红队球员
+        const redPositions = [
+            [-20, 0, 0], [-25, 0, 15], [-25, 0, -15], [-35, 0, 0]
+        ];
+        redPositions.forEach((pos, i) => {
+            const player = createStickPlayer(0xff0000, i + 1);
+            player.model.position.set(...pos);
+            scene.add(player.model);
+            redPlayers.push(player);
+        });
+        
+        // 蓝队球员
+        const bluePositions = [
+            [10, 0, 0], [20, 0, 10], [20, 0, -10], [30, 0, 5], [30, 0, -5], [40, 0, 0]
+        ];
+        bluePositions.forEach((pos, i) => {
+            const player = createStickPlayer(0x0000ff, i + 1);
+            player.model.position.set(...pos);
+            scene.add(player.model);
+            bluePlayers.push(player);
+        });
+        
+        // 创建足球
+        const ball = createFootball();
+        ball.position.set(-10, 0.3, 5); // 初始在5号脚下
+        
+        // 相机初始位置（俯视）
+        camera.position.set(0, 80, 40);
+        camera.lookAt(0, 0, 0);
+        
+        // 动画参数
+        let animationStarted = false;
+        let animationTime = 0;
+        const animationDuration = 8000; // 8秒动画
+        
+        // 动画阶段
+        const PHASE_PASS = 0;
+        const PHASE_DRIBBLE = 1;
+        const PHASE_SHOOT = 2;
+        const PHASE_GOAL = 3;
+        let currentPhase = PHASE_PASS;
+        
+        // 球的速度和旋转
+        let ballVelocity = new THREE.Vector3();
+        let ballRotation = new THREE.Vector3();
+        
+        // 点击开始动画
+        document.addEventListener('click', () => {
+            if (!animationStarted) {
+                animationStarted = true;
+                document.getElementById('info').textContent = '红队5号传球...';
+            }
+        });
+        
+        // 动画更新函数
+        function updateAnimation(deltaTime) {
+            if (!animationStarted) return;
+            
+            animationTime += deltaTime;
+            const progress = animationTime / animationDuration;
+            
+            // 传球阶段 (0-2秒)
+            if (animationTime < 2000) {
+                currentPhase = PHASE_PASS;
+                const passProgress = animationTime / 2000;
+                
+                // 5号转向7号
+                red5.model.rotation.y = -Math.PI / 4 * passProgress;
+                
+                // 球从5号传向7号
+                if (animationTime > 500) {
+                    const ballProgress = (animationTime - 500) / 1500;
+                    ball.position.x = -10 + 5 * ballProgress;
+                    ball.position.z = 5 - 15 * ballProgress;
+                    ball.position.y = 0.3 + Math.sin(ballProgress * Math.PI) * 2;
+                    
+                    // 球的旋转
+                    ball.rotation.x += 0.2;
+                    ball.rotation.z += 0.1;
+                }
+                
+                document.getElementById('info').textContent = '红队5号传球给7号...';
+            }
+            // 带球阶段 (2-5秒)
+            else if (animationTime < 5000) {
+                currentPhase = PHASE_DRIBBLE;
+                const dribbleProgress = (animationTime - 2000) / 3000;
+                
+                // 7号带球前进
+                red7.model.position.x = -5 + 35 * dribbleProgress;
+                red7.model.position.z = -10 + 10 * dribbleProgress;
+                
+                // 球跟随7号
+                ball.position.x = red7.model.position.x + 0.5;
+                ball.position.z = red7.model.position.z;
+                ball.position.y = 0.3;
+                
+                // 跑动动画
+                const runCycle = animationTime * 0.01;
+                red7.leftLeg.rotation.x = Math.sin(runCycle) * 0.5;
+                red7.rightLeg.rotation.x = -Math.sin(runCycle) * 0.5;
+                red7.leftArm.rotation.x = -Math.sin(runCycle) * 0.3;
+                red7.rightArm.rotation.x = Math.sin(runCycle) * 0.3;
+                
+                // 相机开始跟随
+                const cameraProgress = dribbleProgress;
+                camera.position.x = 0 + red7.model.position.x * 0.5 * cameraProgress;
+                camera.position.y = 80 - 50 * cameraProgress;
+                camera.position.z = 40 - 20 * cameraProgress + red7.model.position.z * 0.5 * cameraProgress;
+                camera.lookAt(red7.model.position);
+                
+                document.getElementById('info').textContent = '红队7号带球突破...';
+            }
+            // 射门阶段 (5-6秒)
+            else if (animationTime < 6000) {
+                currentPhase = PHASE_SHOOT;
+                const shootProgress = (animationTime - 5000) / 1000;
+                
+                // 射门动作
+                red7.rightLeg.rotation.x = -Math.PI / 4 * Math.sin(shootProgress * Math.PI);
+                
+                // 球飞向球门
+                if (animationTime > 5200) {
+                    const ballFlyProgress = (animationTime - 5200) / 800;
+                    ball.position.x = 30 + 20 * ballFlyProgress;
+                    ball.position.y = 0.3 + 2 * Math.sin(ballFlyProgress * Math.PI * 0.5);
+                    ball.position.z = 0;
+                    
+                    // 快速旋转
+                    ball.rotation.x += 0.5;
+                    ball.rotation.y += 0.3;
+                }
+                
+                document.getElementById('info').textContent = '红队7号射门！';
+            }
+            // 进球阶段 (6-8秒)
+            else if (animationTime < 8000) {
+                currentPhase = PHASE_GOAL;
+                
+                // 球在球门内
+                ball.position.x = 51;
+                ball.position.y = 1.5;
+                ball.position.z = 0;
+                
+                // 更新比分
+                if (animationTime < 6100) {
+                    document.getElementById('score').textContent = '1 - 0';
+                    document.getElementById('info').textContent = '进球了！！！红队7号进球！';
+                }
+                
+                // 7号庆祝
+                red7.model.position.y = Math.abs(Math.sin(animationTime * 0.01)) * 2;
+                red7.leftArm.rotation.z = Math.PI / 2;
+                red7.rightArm.rotation.z = -Math.PI / 2;
+                
+                // 相机环绕
+                const celebrateProgress = (animationTime - 6000) / 2000;
+                const angle = celebrateProgress * Math.PI * 2;
+                camera.position.x = red7.model.position.x + Math.sin(angle) * 20;
+                camera.position.z = red7.model.position.z + Math.cos(angle) * 20;
+                camera.position.y = 15;
+                camera.lookAt(red7.model.position.x, 5, red7.model.position.z);
+            }
+            // 动画结束
+            else {
+                document.getElementById('info').textContent = '动画结束 | 点击重新播放';
+                animationStarted = false;
+                animationTime = 0;
+                
+                // 重置位置
+                red5.model.position.set(-10, 0, 5);
+                red7.model.position.set(-5, 0, -10);
+                ball.position.set(-10, 0.3, 5);
+                camera.position.set(0, 80, 40);
+                camera.lookAt(0, 0, 0);
+                
+                // 重置动作
+                red7.leftLeg.rotation.x = 0;
+                red7.rightLeg.rotation.x = 0;
+                red7.leftArm.rotation.x = 0;
+                red7.rightArm.rotation.x = 0;
+                red7.leftArm.rotation.z = Math.PI / 6;
+                red7.rightArm.rotation.z = -Math.PI / 6;
+                red7.model.position.y = 0;
+                red7.model.rotation.y = 0;
+                red5.model.rotation.y = 0;
+            }
+        }
+        
+        // 动画循环
+        let lastTime = 0;
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+            
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+            
+            updateAnimation(deltaTime);
+            
+            renderer.render(scene, camera);
+        }
+        
+        // 窗口大小调整
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // 开始动画循环
+        animate(0);
+    </script>
+</body>
+</html>
