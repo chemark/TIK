@@ -1,54 +1,146 @@
 
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>Rocket Asteroid Collector</title>
+  <style>
+    body { 
+      margin: 0; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      height: 100vh; 
+      background: #000; 
+    }
+    canvas { 
+      border: 2px solid #0f0; 
+      box-shadow: 0 0 10px #0f0; 
+    }
+  </style>
+</head>
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+  <script>
+    let rocket, asteroids, stars;
+    let direction = 'right';
+    let score = 0;
+    let gameOver = false;
+    let collectAnimation = 0;
 
+    function setup() {
+      createCanvas(600, 400);
+      pixelDensity(1);
+      rocket = [{x: 10, y: 10}];
+      asteroids = spawnAsteroid();
+      stars = Array(50).fill().map(() => ({x: random(width), y: random(height), speed: random(1, 3)}));
+    }
 
-  Rocket Asteroid Collector
-  
-  
-    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #000; }
-    canvas { border: 2px solid #0f0; box-shadow: 0 0 10px #0f0; }
-  
+    function spawnAsteroid() {
+      return {x: floor(random(width / 20)) * 20, y: floor(random(height / 20)) * 20};
+    }
 
+    function draw() {
+      background(0);
 
+      // Draw scrolling starfield
+      fill(255);
+      noStroke();
+      stars.forEach(star => {
+        star.y += star.speed;
+        if (star.y > height) star.y -= height;
+        rect(star.x, star.y, 2, 2);
+      });
 
-let rocket, asteroids, stars;
-let direction = 'right';
-let score = 0;
-let gameOver = false;
-let collectAnimation = 0;
+      // Draw rocket (snake-like)
+      noStroke();
+      for (let i = 0; i < rocket.length; i++) {
+        fill(0, 255 - i * 20, 0);
+        rect(rocket[i].x, rocket[i].y, 20, 20);
+        if (i === 0) {
+          // Rocket head with glow
+          fill(0, 255, 0, 100);
+          ellipse(rocket[i].x + 10, rocket[i].y + 10, 30, 30);
+        }
+      }
 
-<p>function setup() {<br>  createCanvas(600, 400);<br>  pixelDensity(1);<br>  rocket = [{x: 10, y: 10}];<br>  asteroids = spawnAsteroid();<br>  stars = Array(50).fill().map(() =&gt; ({x: random(width), y: random(height), speed: random(1, 3)}));<br>}</p>
-<p>function spawnAsteroid() {<br>  return {x: floor(random(width / 20)) * 20, y: floor(random(height / 20)) * 20};<br>}</p>
-<p>function draw() {<br>  background(0);</p>
-<p>  // Draw scrolling starfield<br>  fill(255);<br>  noStroke();<br>  stars.forEach(star =&gt; {<br>    star.y += star.speed;<br>    if (star.y &gt; height) star.y -= height;<br>    rect(star.x, star.y, 2, 2);<br>  });</p>
-<p>  // Draw rocket (snake-like)<br>  noStroke();<br>  for (let i = 0; i &lt; rocket.length; i++) {<br>    fill(0, 255 - i * 20, 0);<br>    rect(rocket[i].x, rocket[i].y, 20, 20);<br>    if (i === 0) {<br>      // Rocket head with glow<br>      fill(0, 255, 0, 100);<br>      ellipse(rocket[i].x + 10, rocket[i].y + 10, 30, 30);<br>    }<br>  }</p>
-<p>  // Draw asteroid with pulsing animation<br>  fill(200, 200, 255);<br>  let pulse = sin(frameCount * 0.1) * 5 + 15;<br>  ellipse(asteroids.x + 10, asteroids.y + 10, pulse, pulse);</p>
-<p>  // Collection animation<br>  if (collectAnimation &gt; 0) {<br>    fill(255, 255, 0, collectAnimation * 10);<br>    ellipse(asteroids.x + 10, asteroids.y + 10, collectAnimation * 5, collectAnimation * 5);<br>    collectAnimation--;<br>  }</p>
-<p>  // Update rocket position<br>  if (frameCount % 5 === 0 &amp;&amp; !gameOver) {<br>    let head = {x: rocket[0].x, y: rocket[0].y};<br>    if (direction === &#39;right&#39;) head.x += 20;<br>    if (direction === &#39;left&#39;) head.x -= 20;<br>    if (direction === &#39;up&#39;) head.y -= 20;<br>    if (direction === &#39;down&#39;) head.y += 20;</p>
-<pre><code>// Check boundaries
-if (head.x &lt; 0 || head.x &gt;= width || head.y &lt; 0 || head.y &gt;= height) {
-  gameOver = true;
-}
+      // Draw asteroid with pulsing animation
+      fill(200, 200, 255);
+      let pulse = sin(frameCount * 0.1) * 5 + 15;
+      ellipse(asteroids.x + 10, asteroids.y + 10, pulse, pulse);
 
-// Check collision with tail
-for (let i = 1; i &lt; rocket.length; i++) {
-  if (head.x === rocket[i].x &amp;&amp; head.y === rocket[i].y) {
-    gameOver = true;
-  }
-}
+      // Collection animation
+      if (collectAnimation > 0) {
+        fill(255, 255, 0, collectAnimation * 10);
+        ellipse(asteroids.x + 10, asteroids.y + 10, collectAnimation * 5, collectAnimation * 5);
+        collectAnimation--;
+      }
 
-rocket.unshift(head);
+      // Update rocket position
+      if (frameCount % 5 === 0 && !gameOver) {
+        let head = {x: rocket[0].x, y: rocket[0].y};
+        if (direction === 'right') head.x += 20;
+        if (direction === 'left') head.x -= 20;
+        if (direction === 'up') head.y -= 20;
+        if (direction === 'down') head.y += 20;
 
-// Check asteroid collection
-if (head.x === asteroids.x &amp;&amp; head.y === asteroids.y) {
-  score++;
-  asteroids = spawnAsteroid();
-  collectAnimation = 20;
-} else {
-  rocket.pop();
-}
-</code></pre>
-<p>  }</p>
-<p>  // Draw score and game over<br>  textSize(20);<br>  textAlign(LEFT);<br>  fill(0, 255, 0);<br>  textFont(&#39;Courier New&#39;);<br>  text(<code>Score: ${score}</code>, 10, 30);</p>
-<p>  if (gameOver) {<br>    textAlign(CENTER);<br>    textSize(40);<br>    fill(255, 0, 0);<br>    text(&#39;GAME OVER&#39;, width / 2, height / 2);<br>    textSize(20);<br>    text(&#39;Press SPACE to restart&#39;, width / 2, height / 2 + 40);<br>    noLoop();<br>  }<br>}</p>
-<p>function keyPressed() {<br>  if (keyCode === LEFT_ARROW &amp;&amp; direction !== &#39;right&#39;) direction = &#39;left&#39;;<br>  if (keyCode === RIGHT_ARROW &amp;&amp; direction !== &#39;left&#39;) direction = &#39;right&#39;;<br>  if (keyCode === UP_ARROW &amp;&amp; direction !== &#39;down&#39;) direction = &#39;up&#39;;<br>  if (keyCode === DOWN_ARROW &amp;&amp; direction !== &#39;up&#39;) direction = &#39;down&#39;;<br>  if (keyCode === 32 &amp;&amp; gameOver) {<br>    rocket = [{x: 10, y: 10}];<br>    direction = &#39;right&#39;;<br>    score = 0;<br>    gameOver = false;<br>    asteroids = spawnAsteroid();<br>    loop();<br>  }<br>}<br>
+        // Check boundaries
+        if (head.x < 0 || head.x >= width || head.y < 0 || head.y >= height) {
+          gameOver = true;
+        }
 
+        // Check collision with tail
+        for (let i = 1; i < rocket.length; i++) {
+          if (head.x === rocket[i].x && head.y === rocket[i].y) {
+            gameOver = true;
+          }
+        }
+
+        rocket.unshift(head);
+
+        // Check asteroid collection
+        if (head.x === asteroids.x && head.y === asteroids.y) {
+          score++;
+          asteroids = spawnAsteroid();
+          collectAnimation = 20;
+        } else {
+          rocket.pop();
+        }
+      }
+
+      // Draw score and game over
+      textSize(20);
+      textAlign(LEFT);
+      fill(0, 255, 0);
+      textFont('Courier New');
+      text(`Score: ${score}`, 10, 30);
+
+      if (gameOver) {
+        textAlign(CENTER);
+        textSize(40);
+        fill(255, 0, 0);
+        text('GAME OVER', width / 2, height / 2);
+        textSize(20);
+        text('Press SPACE to restart', width / 2, height / 2 + 40);
+        noLoop();
+      }
+    }
+
+    function keyPressed() {
+      if (keyCode === LEFT_ARROW && direction !== 'right') direction = 'left';
+      if (keyCode === RIGHT_ARROW && direction !== 'left') direction = 'right';
+      if (keyCode === UP_ARROW && direction !== 'down') direction = 'up';
+      if (keyCode === DOWN_ARROW && direction !== 'up') direction = 'down';
+      if (keyCode === 32 && gameOver) {
+        rocket = [{x: 10, y: 10}];
+        direction = 'right';
+        score = 0;
+        gameOver = false;
+        asteroids = spawnAsteroid();
+        loop();
+      }
+    }
+  </script>
+</body>
+</html>
